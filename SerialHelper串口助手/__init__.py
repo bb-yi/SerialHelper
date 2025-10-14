@@ -20,20 +20,40 @@ from bpy.types import Context
 import re
 import queue
 import random
-
+import webbrowser
 
 bl_info = {
     "name": "Serial Helper/串口助手",
     "author": "SFY",
     "description": "在blender中使用串口进行通讯/A tool to help with serial communication.",
     "blender": (2, 80, 0),
-    "version": (1, 0, 1),
+    "version": (1, 0, 2),
     "location": "View3D > Tool Shelf",
     "warning": "",
-    "category": "Generic"
+    "category": "Generic",
 }
 
-# 定义属性组
+
+class SerialHelperPreferences(bpy.types.AddonPreferences):
+    bl_idname = __name__
+
+    # 在偏好设置中添加一个按钮
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row()
+        row.label(text="Serial Helper/串口助手")
+        row.label(text="Version : 1.0.1")
+        row.label(text="BY:SFY")
+        layout.operator("wm.open_github_docs", text="Open GitHub Docs", icon="QUESTION")
+
+
+class OpenGitHubDocsOperator(bpy.types.Operator):
+    bl_idname = "wm.open_github_docs"
+    bl_label = "打开GitHub文档/提交建议"
+
+    def execute(self, context):
+        webbrowser.open("https://github.com/bb-yi/SerialHelper")
+        return {"FINISHED"}
 
 
 class SerialConnection:
@@ -50,15 +70,15 @@ class ServoDataSender:
 
     def pack_servo_data(self, servos):
         # servos 是一个包含多个舵机数据的列表，每个元素是一个 (编号, 角度) 的元组
-        data_str = ''
+        data_str = ""
         for servo_id, angle in servos:
-            data_str += f's{servo_id:03d}a{angle:.2f}'
+            data_str += f"s{servo_id:03d}a{angle:.2f}"
         return data_str
 
     def collect_and_send_servo_data(self):
-        arm1_data = math.degrees(bpy.data.objects['Armature'].pose.bones['arm1'].rotation_euler[2]) + 90
-        arm2_data = -math.degrees(bpy.data.objects['Armature'].pose.bones['arm2'].rotation_euler[0]) + 90
-        arm3_data = math.degrees(bpy.data.objects['Armature'].pose.bones['arm3'].rotation_euler[0]) + 140
+        arm1_data = math.degrees(bpy.data.objects["Armature"].pose.bones["arm1"].rotation_euler[2]) + 90
+        arm2_data = -math.degrees(bpy.data.objects["Armature"].pose.bones["arm2"].rotation_euler[0]) + 90
+        arm3_data = math.degrees(bpy.data.objects["Armature"].pose.bones["arm3"].rotation_euler[0]) + 140
         servos = [(1, arm1_data), (2, arm2_data), (3, arm3_data)]
         packed_data = self.pack_servo_data(servos)
         self.serial_connection.serial.write(packed_data.encode())
@@ -67,7 +87,7 @@ class ServoDataSender:
 
 def extract_value(input_str, var_name):
     # 定义正则表达式模式，用于匹配特定变量名和其后的浮点数（包括负数）
-    pattern = fr"{re.escape(var_name)}=([-+]?\d*\.\d+|\d+)"
+    pattern = rf"{re.escape(var_name)}=([-+]?\d*\.\d+|\d+)"
 
     # 使用re.search查找第一个匹配项
     match = re.search(pattern, input_str)
@@ -96,7 +116,7 @@ class SerialHelperThread(threading.Thread):
             if not bpy.context.scene.serial_helper.StopReceiving:
                 try:
                     data = self.serial_connection.serial.readline()
-                    data = data.decode(bpy.context.scene.serial_helper.Encoding, errors='ignore').strip()
+                    data = data.decode(bpy.context.scene.serial_helper.Encoding, errors="ignore").strip()
                     self.data_queue.put(data)
                     bpy.app.timers.register(serial_data_update)
                 except Exception as e:
@@ -113,8 +133,11 @@ def serial_data_update():
         print(mapping_item.matching_data_value)
         if extract_value(data, mapping_item.matching_data_name) != None:
             mapping_item.matching_data_value = extract_value(data, mapping_item.matching_data_name)
+            mapping_item.id_data.update_tag()  # 通知依赖图更新
+            print("更新")
+    bpy.context.view_layer.update()  # 确保整个场景更新
 
-# 移除多余的项
+    # 移除多余的项
     if len(scene.serial_helper.serial_data_list) > scene.serial_helper.serial_data_max_count:
         for i in range(len(scene.serial_helper.serial_data_list) - scene.serial_helper.serial_data_max_count):
             scene.serial_helper.serial_data_list.remove(i)
@@ -149,8 +172,8 @@ def open_serial_port():
 class SerialHelpPanel(bpy.types.Panel):
     bl_label = "Serial Helper"
     bl_idname = "VIEW3D_PT_serial_help"  # 通常与视图3D面板关联的ID
-    bl_space_type = 'VIEW_3D'  # VIEW_3D 是3D视图的上下文
-    bl_region_type = 'UI'  # UI 区域类型通常用于侧边的工具面板
+    bl_space_type = "VIEW_3D"  # VIEW_3D 是3D视图的上下文
+    bl_region_type = "UI"  # UI 区域类型通常用于侧边的工具面板
     bl_category = "串口助手"  # 面板的类别
 
     def draw(self, context):
@@ -158,14 +181,14 @@ class SerialHelpPanel(bpy.types.Panel):
         scene = context.scene
 
         col = layout.column()
-        col.operator("test.operator", text="Test Operator")
+        # col.operator("test.operator", text="Test Operator")
         row = col.row(align=True)
         row.scale_y = 2  # 调整按钮高度
         row.label(text="端口名：")
-        row.alignment = 'LEFT'
+        row.alignment = "LEFT"
         row1 = row.row()
         row1.scale_x = 2
-        row1.alignment = 'EXPAND'
+        row1.alignment = "EXPAND"
         if scene.serial_helper.use_input_serial_port:
             row1.prop(scene.serial_helper, "user_input_serial_port", text="")
         else:
@@ -184,18 +207,18 @@ class SerialHelpPanel(bpy.types.Panel):
 
 
 class ReceivingSettingsPanel(bpy.types.Panel):
-    bl_label = '接收设置'
-    bl_idname = 'VIEW_3D_PT_ReceivingSettings'
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
-    bl_context = 'scene'
+    bl_label = "接收设置"
+    bl_idname = "VIEW_3D_PT_ReceivingSettings"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_context = "scene"
 
     bl_order = 0
 
-    bl_parent_id = 'VIEW3D_PT_serial_help'
+    bl_parent_id = "VIEW3D_PT_serial_help"
     bl_ui_units_x = 0
 
-    @ classmethod
+    @classmethod
     def poll(cls, context):
         return not (False)
 
@@ -212,11 +235,11 @@ class ReceivingSettingsPanel(bpy.types.Panel):
 class SerialDataDisplayPanel(bpy.types.Panel):
     bl_label = "接受数据显示"
     bl_idname = "VIEW_3D_PT_DataDisplayPanel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
     bl_context = "scene"
 
-    bl_parent_id = 'VIEW_3D_PT_ReceivingSettings'
+    bl_parent_id = "VIEW_3D_PT_ReceivingSettings"
     bl_ui_units_x = 0
 
     def draw(self, context):
@@ -226,7 +249,7 @@ class SerialDataDisplayPanel(bpy.types.Panel):
         row = layout.row()
         # row.operator("serial_data.add_item", text="添加项")
         # row.operator("serial_data.delete_item", text="删除项")
-        row.operator("serial_data.clear_items", text="清空数据", icon='TRASH')
+        row.operator("serial_data.clear_items", text="清空数据", icon="TRASH")
         row.prop(scene.serial_helper, "serial_data_max_count", text="显示数量")
 
 
@@ -239,10 +262,10 @@ class SERIAL_UL_DataList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         # item是列表中的每一项，这里我们假设item有两个属性：index和data_string
         row = layout.row(align=True)
-        row.alignment = 'LEFT'.upper()
+        row.alignment = "LEFT".upper()
         row.label(text=f"{item.index}")
         row2 = row.row(align=True)
-        row2.alignment = 'Expand'.upper()
+        row2.alignment = "Expand".upper()
         row2.scale_x = 1.5
         row2.prop(item, "data_string", text="")
 
@@ -255,20 +278,20 @@ class SerialDataMatchingProperties(bpy.types.PropertyGroup):
 class SERIAL_UL_DataMatchingList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         row = layout.row(align=True)
-        row.alignment = 'EXPAND'
+        row.alignment = "EXPAND"
         row.prop(item, "matching_data_name", text="数据名称")
         row.prop(item, "matching_data_value", text="匹配值")
-        row.operator("serial_data_matching.copy_driver", text="", icon='COPYDOWN', emboss=False).index = index
+        row.operator("serial_data_matching.copy_driver", text="", icon="COPYDOWN", emboss=False).index = index
 
 
 class SerialHelperDataMatchingPanel(bpy.types.Panel):
     bl_label = "数据匹配"
     bl_idname = "VIEW_3D_PT_DataMatchingPanel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
     bl_context = "scene"
 
-    bl_parent_id = 'VIEW_3D_PT_ReceivingSettings'
+    bl_parent_id = "VIEW_3D_PT_ReceivingSettings"
     bl_ui_units_x = 0
 
     def draw(self, context):
@@ -294,11 +317,11 @@ class SerialHelperDataMatchingPanel(bpy.types.Panel):
 class SendDataSerialPanel(bpy.types.Panel):
     bl_label = "发送数据"
     bl_idname = "VIEW_3D_PT_SendDataInSerialPanel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
     bl_context = "scene"
 
-    bl_parent_id = 'VIEW3D_PT_serial_help'
+    bl_parent_id = "VIEW3D_PT_serial_help"
     bl_ui_units_x = 0
 
     def draw(self, context):
@@ -310,13 +333,13 @@ class SendDataSerialPanel(bpy.types.Panel):
         row.prop(scene.serial_helper, "serial_send_data", text="")
         row2 = box.row()
         col = row2.column()
-        col.alignment = 'Center'.upper()
-        col.scale_x = 1.5
+        col.alignment = "Center".upper()
+        col.scale_x = 1
         col.scale_y = 2
         col.prop(scene.serial_helper, "is_newline", text="换行", icon_value=745)
         col2 = row2.column()
         col2.scale_y = 2
-        col2.operator("serial.send_data_operator", text="发送数据", icon='FILE_TICK')
+        col2.operator("serial.send_data_operator", text="发送数据", icon="FILE_TICK")
         row3 = box.row()
         row3.prop(scene.serial_helper, "is_auto_send", text="定时发送", icon_value=118)
         row3.prop(scene.serial_helper, "auto_send_interval", text="发送间隔(s)")
@@ -330,10 +353,10 @@ class SendVariablePathItem(bpy.types.PropertyGroup):
 class SERIAL_UL_SendVariable_list(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         row = layout.row(align=True)
-        row.alignment = 'LEFT'
+        row.alignment = "LEFT"
         row.label(text=f"{index} ")
         row2 = row.row(align=True)
-        row2.alignment = 'EXPAND'
+        row2.alignment = "EXPAND"
         row2.prop(item, "variable_name", text="")
         row2.prop(item, "data_path", text="")
 
@@ -341,32 +364,36 @@ class SERIAL_UL_SendVariable_list(bpy.types.UIList):
 class SerialHelperSendVariablePanel(bpy.types.Panel):
     bl_label = "变量列表"
     bl_idname = "VIEW_3D_PT_SendVariablePanel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
     bl_context = "scene"
 
-    bl_parent_id = 'VIEW_3D_PT_SendDataInSerialPanel'
+    bl_parent_id = "VIEW_3D_PT_SendDataInSerialPanel"
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-
+        box = layout.box()
+        box.scale_y = 0.4
+        box.label(text="使用{变量名}就可以将变量的值加入到发送数据中")
+        box.label(text="var_name : 采样 , data_path : bpy.data.scenes[0].cycles.samples")
+        box.label(text="{采样}   输出你当前场景的采样")
         row = layout.row()
         row.template_list("SERIAL_UL_SendVariable_list", "", scene.serial_helper, "Send_variable_list", scene.serial_helper, "Send_variable_index")
 
         col = row.column(align=True)
-        col.operator("serial.add_variable_operator", icon='ADD', text="")
-        col.operator("serial.remove_variable_operator", icon='REMOVE', text="")
+        col.operator("serial.add_variable_operator", icon="ADD", text="")
+        col.operator("serial.remove_variable_operator", icon="REMOVE", text="")
 
 
 class SerialFastMessagePanle(bpy.types.Panel):
-    bl_label = "快速消息"
+    bl_label = "快速消息1"
     bl_idname = "VIEW_3D_PT_FastMessagePanel"
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'UI'
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
     bl_context = "scene"
 
-    bl_parent_id = 'VIEW_3D_PT_SendDataInSerialPanel'
+    bl_parent_id = "VIEW_3D_PT_SendDataInSerialPanel"
 
     def draw(self, context):
         layout = self.layout
@@ -374,8 +401,8 @@ class SerialFastMessagePanle(bpy.types.Panel):
         row = layout.row()
         row.template_list("SERIAL_UL_FastMessage_list", "", scene.serial_helper, "fast_message_list", scene.serial_helper, "fast_message_index")
         col = row.column(align=True)
-        col.operator("serial.add_fast_message_operator", icon='ADD', text="")
-        col.operator("serial.remove_fast_message_operator", icon='REMOVE', text="")
+        col.operator("serial.add_fast_message_operator", icon="ADD", text="")
+        col.operator("serial.remove_fast_message_operator", icon="REMOVE", text="")
 
 
 class SerialFastMessageItem(bpy.types.PropertyGroup):
@@ -386,13 +413,13 @@ class SerialFastMessageItem(bpy.types.PropertyGroup):
 class SERIAL_UL_FastMessage_list(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         row = layout.row(align=True)
-        row.alignment = 'LEFT'
+        row.alignment = "LEFT"
         row.scale_x = 2
         row.label(text=f"{index+1}:")
         row.prop(item, "message_name", text="")
         row2 = row.row(align=True)
         row2.scale_x = 1.5
-        row2.alignment = 'EXPAND'
+        row2.alignment = "EXPAND"
         row2.prop(item, "message", text="")
         row2.operator("serial.send_fast_message_operator", text="", icon_value=415, emboss=False).index = index
 
@@ -405,7 +432,7 @@ class ClearSerialDataItemsOperator(bpy.types.Operator):
         scene = context.scene
         scene.serial_helper.serial_data_list.clear()
         scene.serial_helper.serial_data_count = 1
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class AddSerialDataMatchingItemOperator(bpy.types.Operator):
@@ -419,7 +446,7 @@ class AddSerialDataMatchingItemOperator(bpy.types.Operator):
         scene.serial_helper.serial_data_matching_index = len(scene.serial_helper.serial_data_matching_list) - 1
         item.matching_data_name = "数据名称"
         item.matching__data_value = 0
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class RemoveSerialDataMatchingItemOperator(bpy.types.Operator):
@@ -432,10 +459,10 @@ class RemoveSerialDataMatchingItemOperator(bpy.types.Operator):
         if scene.serial_helper.serial_data_matching_list:
             scene.serial_helper.serial_data_matching_list.remove(scene.serial_helper.serial_data_matching_index)
             if scene.serial_helper.serial_data_matching_index != 0:
-                scene.serial_helper.serial_data_matching_index = scene.serial_helper.serial_data_matching_index-1
+                scene.serial_helper.serial_data_matching_index = scene.serial_helper.serial_data_matching_index - 1
             else:
                 scene.serial_helper.serial_data_matching_index = 0
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class CopyDriverSerialDataMatchingItemOperator(bpy.types.Operator):
@@ -446,8 +473,8 @@ class CopyDriverSerialDataMatchingItemOperator(bpy.types.Operator):
     def execute(self, context):
         full_path = f"#bpy.context.scene.serial_helper.serial_data_matching_list[{self.index}].matching_data_value"
         bpy.context.window_manager.clipboard = full_path
-        self.report({'INFO'}, f"已复制驱动器路径: {full_path}")
-        return {'FINISHED'}
+        self.report({"INFO"}, f"已复制驱动器路径: {full_path}")
+        return {"FINISHED"}
 
 
 class UpdateSerialDriverDataMatchingOperator(bpy.types.Operator):
@@ -465,14 +492,14 @@ class UpdateSerialDriverDataMatchingOperator(bpy.types.Operator):
         var.targets[0].id = bpy.context.scene
         var.targets[0].data_path = "serial_helper.serial_data_matching_list[0].matching_data_value"
         driver.expression = f"serial_data_matching_update_use"
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 def format_replace_var_string(self, input_string):
     scene = bpy.context.scene
     eval_globals = {
-        'random': random,
-        'math': math,  # 示例：如果使用了 math 模块
+        "random": random,
+        "math": math,  # 示例：如果使用了 math 模块
         # 可以添加更多你可能需要的模块
     }
     for item in scene.serial_helper.Send_variable_list:
@@ -481,7 +508,7 @@ def format_replace_var_string(self, input_string):
             input_string = input_string.replace(f"{{{item.variable_name}}}", str(value))
         except:
             print(f"变量{item.variable_name}数据路径{item.data_path}获取失败")
-            self.report({'ERROR'}, f"变量{item.variable_name}数据路径{item.data_path}获取失败")
+            self.report({"ERROR"}, f"变量{item.variable_name}数据路径{item.data_path}获取失败")
     return input_string
 
 
@@ -491,14 +518,19 @@ class SendDataSerialOperator(bpy.types.Operator):
 
     def execute(self, context):
         scene = context.scene
-        SerialConnection = bpy.app.driver_namespace["serial_connection"]
-        data_to_send = scene.serial_helper.serial_send_data
-        var_replace_str = format_replace_var_string(self, data_to_send)
-        print(var_replace_str)
-        if scene.serial_helper.is_newline:
-            var_replace_str = var_replace_str+"\r\n"
-        SerialConnection.serial.write(var_replace_str.encode(scene.serial_helper.Encoding))
-        return {'FINISHED'}
+        try:
+            SerialConnection = bpy.app.driver_namespace["serial_connection"]
+            data_to_send = scene.serial_helper.serial_send_data
+            var_replace_str = format_replace_var_string(self, data_to_send)
+            print(var_replace_str)
+            if scene.serial_helper.is_newline:
+                var_replace_str = var_replace_str + "\r\n"
+            SerialConnection.serial.write(var_replace_str.encode(scene.serial_helper.Encoding))
+        except KeyError as e:
+            print(f"An error occurred: {e}")
+            self.report({"ERROR"}, f"请先打开串口")
+
+        return {"FINISHED"}
 
 
 class AddSerialHelperSendVariableOperator(bpy.types.Operator):
@@ -510,7 +542,7 @@ class AddSerialHelperSendVariableOperator(bpy.types.Operator):
         item.variable_name = "var_name_" + str(len(context.scene.serial_helper.Send_variable_list))
         item.data_path = "data_path"
         context.scene.serial_helper.Send_variable_index = len(context.scene.serial_helper.Send_variable_list) - 1
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class RemoveSerialHelperSendVariableOperator(bpy.types.Operator):
@@ -523,7 +555,7 @@ class RemoveSerialHelperSendVariableOperator(bpy.types.Operator):
         variable_list.remove(index)
         if index != 0:
             context.scene.serial_helper.Send_variable_index = context.scene.serial_helper.Send_variable_index - 1
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class AddSerialFastMessageListOperator(bpy.types.Operator):
@@ -535,7 +567,7 @@ class AddSerialFastMessageListOperator(bpy.types.Operator):
         item.message_name = "name_" + str(len(context.scene.serial_helper.fast_message_list))
         item.message = ""
         context.scene.serial_helper.fast_message_index = len(context.scene.serial_helper.fast_message_list) - 1
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class RemoveSerialFastMessageListOperator(bpy.types.Operator):
@@ -548,7 +580,7 @@ class RemoveSerialFastMessageListOperator(bpy.types.Operator):
         list.remove(index)
         if index != 0:
             context.scene.serial_helper.fast_message_index = context.scene.serial_helper.fast_message_index - 1
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class SendFastMessageOperator(bpy.types.Operator):
@@ -561,7 +593,7 @@ class SendFastMessageOperator(bpy.types.Operator):
         message = scene.serial_helper.fast_message_list[self.index].message
         scene.serial_helper.serial_send_data = message
         bpy.ops.serial.send_data_operator()
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 def send_data_periodically():
@@ -589,17 +621,17 @@ class testOperator(bpy.types.Operator):
 
     def execute(self, context):
         print(context.scene.serial_helper.bytesize)
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class stopReceivingOperator(bpy.types.Operator):
     bl_idname = "serial.stop_receiving_operator"
     bl_label = "暂停接收"
-    bl_options = {'REGISTER', 'UNDO'}  # 选项，注册到操作列表中，提供撤销功能
+    bl_options = {"REGISTER", "UNDO"}  # 选项，注册到操作列表中，提供撤销功能
 
     def execute(self, context):
         bpy.context.scene.serial_helper.StopReceiving = not bpy.context.scene.serial_helper.StopReceiving
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 class switchTheSerialPortOperator(bpy.types.Operator):
@@ -621,13 +653,11 @@ class switchTheSerialPortOperator(bpy.types.Operator):
             print(context.scene.serial_helper.baudrate)
             try:
                 open_serial_port()
-                self.report(
-                    {'INFO'}, f"串口打开{port}")
+                self.report({"INFO"}, f"串口打开{port}")
             except Exception as e:
                 print(f"An error occurred: {e}")
                 context.scene.serial_helper.serial_is_open = False
-                self.report(
-                    {'ERROR'}, f"串口打开失败,{e}")
+                self.report({"ERROR"}, f"串口打开失败,{e}")
 
         else:
             if "serial_connection" in bpy.app.driver_namespace:
@@ -641,10 +671,9 @@ class switchTheSerialPortOperator(bpy.types.Operator):
                 print("成功关闭串口")
             else:
                 print("无可关闭的串口")
-            self.report(
-                {'INFO'}, "串口关闭.")
+            self.report({"INFO"}, "串口关闭.")
 
-        return {'FINISHED'}
+        return {"FINISHED"}
 
 
 def update_serial_ports(self, context):
@@ -653,88 +682,68 @@ def update_serial_ports(self, context):
 
 
 class SerialHelperProperties(bpy.types.PropertyGroup):
-    use_input_serial_port: bpy.props.BoolProperty(
-        name="是否手动输入端口",
-        description="是否手动输入端口",
-        default=False
-    )
+    use_input_serial_port: bpy.props.BoolProperty(name="是否手动输入端口", description="是否手动输入端口", default=False)
     serial_ports: bpy.props.EnumProperty(
         name="串口端口",
         description="串口端口",
         items=update_serial_ports,
     )
-    user_input_serial_port: bpy.props.StringProperty(
-        name="手动端口",
-        description="手动输入的端口",
-        default="COM3"
-    )
+    user_input_serial_port: bpy.props.StringProperty(name="手动端口", description="手动输入的端口", default="COM3")
 
-    serial_is_open: bpy.props.BoolProperty(
-        name="serial_is_open_name",
-        description="串口是否打开",
-        default=False
-    )
-    baudrate: bpy.props.IntProperty(
-        name="波特率",
-        description="波特率",
-        default=115200
-    )
+    serial_is_open: bpy.props.BoolProperty(name="serial_is_open_name", description="串口是否打开", default=False)
+    baudrate: bpy.props.IntProperty(name="波特率", description="波特率", default=115200)
     # FIVEBITS、SIXBITS、SEVENBITS、EIGHTBITS
     bytesize: bpy.props.EnumProperty(
         name="数据位",
         description="数据位",
         items=[
-            ('5', "5位", "使用7位数据位"),
-            ('6', "6位", "使用8位数据位"),
-            ('7', "7位", "使用7位数据位"),
-            ('8', "8位", "使用8位数据位"),
+            ("5", "5位", "使用7位数据位"),
+            ("6", "6位", "使用8位数据位"),
+            ("7", "7位", "使用7位数据位"),
+            ("8", "8位", "使用8位数据位"),
         ],
-        default='8'
+        default="8",
     )
     # STOPBITS_ONE、STOPBITS_ONE_POINT_FIVE、STOPBITS_TWO
     stopbits: bpy.props.EnumProperty(
         name="停止位",
         description="停止位",
         items=[
-            ('1', "1", "1位停止位"),
-            ('1.5', "1.5", "1.5位停止位"),
-            ('2', "2", "2位停止位"),
+            ("1", "1", "1位停止位"),
+            ("1.5", "1.5", "1.5位停止位"),
+            ("2", "2", "2位停止位"),
             # 有些系统可能还支持其他类型的校验位，如：
             # 'MARK', "标记校验", "标记校验位"),
             # 'SPACE', "空格校验", "空格校验位"),
         ],
-        default='1'
+        default="1",
     )
     # PARITY_NONE、PARITY_EVEN、PARITY_ODD PARITY_MARK、PARITY_SPACE
     parity: bpy.props.EnumProperty(
         name="校验位",
         description="校验位",
         items=[
-            ('N', "NONE", "无校验位"),
-            ('E', "偶校验", "偶数校验位"),
-            ('O', "奇校验", "奇数校验位"),
-            ('M', "MARK", "标记校验位"),
-            ('S', "SPACE", "空格校验位"),
+            ("N", "NONE", "无校验位"),
+            ("E", "偶校验", "偶数校验位"),
+            ("O", "奇校验", "奇数校验位"),
+            ("M", "MARK", "标记校验位"),
+            ("S", "SPACE", "空格校验位"),
         ],
-        default='N'
+        default="N",
     )
     Encoding: bpy.props.EnumProperty(
         name="编码格式",
         description="编码格式",
         items=[
-            ('utf-8', "utf-8", "utf-8"),
-            ('ascii', "ascii", "ascii"),
-            ('gbk', "gbk", "gbk"),
-            ('utf-16', "utf-16", "utf-16"),
-            ('gb2312', "gb2312", "gb2312"),
+            ("utf-8", "utf-8", "utf-8"),
+            ("ascii", "ascii", "ascii"),
+            ("gbk", "gbk", "gbk"),
+            ("utf-16", "utf-16", "utf-16"),
+            ("gb2312", "gb2312", "gb2312"),
         ],
-        default='utf-8'
+        default="utf-8",
     )
-    StopReceiving: bpy.props.BoolProperty(
-        name="StopReceiving",
-        description="暂停接收",
-        default=False
-    )
+    StopReceiving: bpy.props.BoolProperty(name="StopReceiving", description="暂停接收", default=False)
     serial_data_list: bpy.props.CollectionProperty(type=SerialDataItemProperties)
     serial_data_index: bpy.props.IntProperty()
     serial_data_count: bpy.props.IntProperty(default=1)
@@ -758,9 +767,6 @@ property_Class = [
     SendVariablePathItem,
     SerialFastMessageItem,
     SerialHelperProperties,
-
-
-
 ]
 
 Panel_Class = [
@@ -775,6 +781,7 @@ Panel_Class = [
     SERIAL_UL_FastMessage_list,
     SerialHelperSendVariablePanel,
     SerialFastMessagePanle,
+    SerialHelperPreferences,
 ]
 
 Operator_Class = [
@@ -791,7 +798,8 @@ Operator_Class = [
     RemoveSerialHelperSendVariableOperator,
     AddSerialFastMessageListOperator,
     RemoveSerialFastMessageListOperator,
-    SendFastMessageOperator
+    SendFastMessageOperator,
+    OpenGitHubDocsOperator,
 ]
 
 
